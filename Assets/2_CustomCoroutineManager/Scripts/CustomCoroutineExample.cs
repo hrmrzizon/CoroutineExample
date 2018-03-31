@@ -1,34 +1,28 @@
 ﻿namespace Example.Coroutine.Custom
 {
+    using Extension.Coroutine;
     using System.Collections;
     using System.Collections.Generic;
-    using Unity.Extension;
     using UnityEngine;
 
     public class CustomCoroutineExample : MonoBehaviour
     {
-        CoroutineState state;
+        private CoroutineState state;
 
         private void Awake()
         {
-            int id = CrtnExecutor.Play(CoroutineCheck());
-
-            state = CrtnExecutor.GetState(id);
-            StartCoroutine(Check());
+            state = Executor.Play(CoroutineCheck());
         }
 
         private void Update()
         {
-            //Debug.Log(state.context);
+            if (Input.GetKey(KeyCode.Space))
+            {
+                Debug.Log(state.empty);
+                Debug.Log(state.context);
+            }
         }
-
-        IEnumerator Check()
-        {
-            yield return new WaitUntil(() => { return true; });
-
-            Debug.LogWarning("Check");
-        }
-
+        
         IEnumerator<Context> CoroutineCheck()
         {
             Debug.LogWarning("Start");
@@ -41,9 +35,29 @@
 
             Debug.LogWarning("Time 3f");
 
-            yield return Context.CreateWaitUntil(() => { return true; });
+            float startTime = Time.time;
+            yield return Context.CreateWaitUntil(() => { return startTime + 3f <= Time.time; });
+            Debug.LogWarning("WaitUntil");
 
-            Debug.LogWarning("Delegate");
+            Time.timeScale = 0.25f;
+            startTime = Time.unscaledTime;
+
+            yield return Context.CreateWaitWhile(() => { return startTime + 3f > Time.unscaledTime; });
+            Time.timeScale = 1f;
+            Debug.LogWarning("WaitWhile");
+
+            yield return Executor.Play(CoroutineCheck2());
+            
+            Debug.LogWarning("EndOfCoroutine");
+        }
+
+        IEnumerator<Context> CoroutineCheck2()
+        {
+            Debug.LogWarning("CoroutineCheck2");
+
+            yield return Context.CreateNormalTimer(3f);
+
+            Debug.LogWarning("Time 3f");
         }
     }
 }

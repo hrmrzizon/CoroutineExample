@@ -1,4 +1,4 @@
-﻿namespace Unity.Extension
+﻿namespace Extension.Coroutine
 {
     using System;
     using System.Text;
@@ -8,6 +8,7 @@
     {
         Default             = 0,
 
+        Coroutine           ,
         Timer               ,
         Delegate            ,
         
@@ -27,6 +28,7 @@
     {
         Time                = 0,
         UnscaledTime        ,
+        FixedTime           ,
         RealTime            ,
     }
 
@@ -49,33 +51,51 @@
 
         public Tag                  tag;
 
-        public static Context operator+(Context context, Tag tag)
+        public CoroutineState       state;
+
+        public static Context operator +(Context context, Tag tag)
         {
             context.tag = tag;
+            return context;
+        }
+
+        public static implicit operator Context(CoroutineState state)
+        {
+            Context context = new Context{ flag = ContextFlag.Coroutine, state = state };
             return context;
         }
 
         public override string ToString()
         {
             StringBuilder builder = new StringBuilder();
-            builder.Append(GetType().ToString()).Append('(').Append(flag).Append(',');
+            builder.Append(GetType().ToString()).Append('(').Append(flag).Append(", ");
             switch (flag)
             {
                 case ContextFlag.Default:
-                    builder.Append(interruptContext).Append(',');
+                    builder.Append(interruptContext);
                     break;
                 case ContextFlag.Timer:
-                    builder.Append(interruptContext).Append(',').Append(timerContext).Append(',').Append(startTime).Append(',').Append(delayTime).Append(',');
+                    builder.Append(interruptContext).Append(", ").Append(timerContext).Append(", ").Append(startTime);
                     break;
                 case ContextFlag.Delegate:
-                    builder.Append(interruptContext).Append(',').Append(delegateContext).Append(',').Append(func).Append(',');
+                    builder.Append(interruptContext).Append(", ").Append(delegateContext).Append(", ").Append(func);
                     break;
             }
-            builder.Append(tag.ToString());
-            builder.Append(')');
+            builder.Append(")");
+
+            if (!tag.empty)
+                builder.Append(" + ").Append(tag.ToString());
+
             return builder.ToString();
         }
 
+        public bool                 isCoroutineExpired
+        {
+            get
+            {
+                return state.isDone;
+            }
+        }
         public bool                 isTimeExpired
         {
             get
@@ -86,6 +106,8 @@
                         return startTime + delayTime <= Time.time;
                     case TimerContext.UnscaledTime:
                         return startTime + delayTime <= Time.unscaledTime;
+                    case TimerContext.FixedTime:
+                        return startTime + delayTime <= Time.fixedTime;
                     case TimerContext.RealTime:
                         return startTime + delayTime <= Time.realtimeSinceStartup;
                     default:
@@ -107,6 +129,8 @@
             {
                 switch (flag)
                 {
+                    case ContextFlag.Coroutine:
+                        return isCoroutineExpired;
                     case ContextFlag.Timer:
                         return isTimeExpired;
                     case ContextFlag.Delegate:
@@ -121,6 +145,16 @@
                         return true;
                 }
             }
+        }
+
+        public static Context CreateCoroutine(InterruptContext _interruptContext, CoroutineState state)
+        {
+            return new Context() { flag = ContextFlag.Coroutine, interruptContext = _interruptContext, state = state };
+        }
+
+        public static Context CreateCoroutine(CoroutineState state)
+        {
+            return new Context() { flag = ContextFlag.Coroutine, interruptContext = InterruptContext.Update, state = state };
         }
 
         #region Interrupt Variance
@@ -250,6 +284,23 @@
             return new Context() { flag = ContextFlag.Timer, timerContext = TimerContext.RealTime, startTime = Time.realtimeSinceStartup, delayTime = _delayTime };
         }
 
+        public static Context CreateFixedTimer(InterruptContext _interruptContext, float _startTime, float _delayTime)
+        {
+            return new Context() { flag = ContextFlag.Timer, interruptContext = _interruptContext, timerContext = TimerContext.FixedTime, startTime = _startTime, delayTime = _delayTime };
+        }
+        public static Context CreateFixedTimer(InterruptContext _interruptContext, float _delayTime)
+        {
+            return new Context() { flag = ContextFlag.Timer, interruptContext = _interruptContext, timerContext = TimerContext.FixedTime, startTime = Time.realtimeSinceStartup, delayTime = _delayTime };
+        }
+        public static Context CreateFixedTimer(float _startTime, float _delayTime)
+        {
+            return new Context() { flag = ContextFlag.Timer, timerContext = TimerContext.FixedTime, startTime = _startTime, delayTime = _delayTime };
+        }
+        public static Context CreateFixedTimer(float _delayTime)
+        {
+            return new Context() { flag = ContextFlag.Timer, timerContext = TimerContext.FixedTime, startTime = Time.realtimeSinceStartup, delayTime = _delayTime };
+        }
+
         #endregion
 
         #region TimerAndDelegate Variance
@@ -298,11 +349,12 @@
     public struct Tag
     {
         public string str;
-        public int num;
+
+        public bool empty { get { return string.IsNullOrEmpty(str); } }
 
         public override string ToString()
         {
-            return string.Format("{0}(\"{1}\",{2})", GetType().ToString(), str, num);
+            return string.Format("{0}(\"{1}\")", GetType().ToString(), str);
         }
     }
 }

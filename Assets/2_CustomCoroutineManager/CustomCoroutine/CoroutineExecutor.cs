@@ -1,4 +1,4 @@
-﻿namespace Unity.Extension
+﻿namespace Extension.Coroutine
 {
     using System;
     using System.Collections;
@@ -29,35 +29,54 @@
 
     public struct CoroutineState
     {
-        private List<Unity.Extension.CrtnExecutor.Coroutine> coroutineList;
-        private int id;
-        public CoroutineState(List<Unity.Extension.CrtnExecutor.Coroutine> _coroutineList, int _id)
+        private List<Executor.Coroutine> coroutineList;
+        private int realid;
+        public CoroutineState(List<Executor.Coroutine> _coroutineList, int _id)
         {
             coroutineList = _coroutineList;
-            id = _id;
+            realid = _id;
         }
+
+        public int id { get { return realid; } }
 
         public Context context
         {
             get
             {
+                if (coroutineList == null) 
+                    return new Context() + new Tag() { str = "Not exist coroutine pair with id.." };
+
                 int sourceID = id;
-                return coroutineList.Find((co) => { return co.id == sourceID; }).context;
+                Executor.Coroutine coroutine = coroutineList.Find((co) => { return co.id == sourceID; });
+
+                if (!coroutine.empty)
+                    return coroutine.context;
+                else
+                    return new Context() + new Tag() { str = "Coroutine has been expired.." };
             }
         }
         public bool empty
         {
             get
             {
+                if (coroutineList == null) return true;
+
                 int sourceID = id;
                 return coroutineList.Find((co) => { return co.id == sourceID; }).enumerator == null;
             }
         }
+        public bool isDone
+        {
+            get
+            {
+                return empty;
+            }
+        }
     }
 
-    public static class CrtnExecutor
+    public static class Executor
     {
-        static CrtnExecutor()
+        static Executor()
         {
             coroutineList = new List<Coroutine>();
             stopIDList = new List<int>();
@@ -95,14 +114,34 @@
         private static List<int>                    stopIDList;
 
         private static int idSource;
-        public static int Play(IEnumerator<Context> _enumerator, Context _context)
+
+        public static CoroutineState Play(IEnumerator<Context> _enumerator, Context _context)
         {
-            coroutineList.Add(new Coroutine() { enumerator = _enumerator, id = idSource++, stop = false, context = _context });
-            return idSource - 1;
+            coroutineList.Add(new Coroutine() { enumerator = _enumerator, id = idSource, stop = false, context = _context });
+            return new CoroutineState(coroutineList, idSource++);
         }
-        public static int Play(IEnumerator<Context> _enumerator)
+        public static CoroutineState Play(IEnumerator<Context> _enumerator)
         {
             return Play(_enumerator, new Context() { flag = ContextFlag.Default, interruptContext = InterruptContext.Update });
+        }
+
+        public static Context PlayForContext(InterruptContext interruptContext, IEnumerator<Context> _enumerator, Context _context)
+        {
+            coroutineList.Add(new Coroutine() { enumerator = _enumerator, id = idSource, stop = false, context = _context });
+            return Context.CreateCoroutine(interruptContext, new CoroutineState(coroutineList, idSource++));
+        }
+        public static Context PlayForContext(InterruptContext interruptContext, IEnumerator<Context> _enumerator)
+        {
+            return PlayForContext(interruptContext, _enumerator, new Context() { flag = ContextFlag.Default, interruptContext = InterruptContext.Update });
+        }
+        public static Context PlayForContext(IEnumerator<Context> _enumerator, Context _context)
+        {
+            coroutineList.Add(new Coroutine() { enumerator = _enumerator, id = idSource, stop = false, context = _context });
+            return Context.CreateCoroutine(new CoroutineState(coroutineList, idSource++));
+        }
+        public static Context PlayForContext(IEnumerator<Context> _enumerator)
+        {
+            return PlayForContext(_enumerator, new Context() { flag = ContextFlag.Default, interruptContext = InterruptContext.Update });
         }
 
         private static void ExecuteCoroutine(InterruptContext interrupt)
@@ -124,6 +163,9 @@
 
                     switch (context.flag)
                     {
+                        case ContextFlag.Coroutine:
+                            passToNext = context.state.isDone;
+                            break;
                         case ContextFlag.Timer:
                             passToNext = context.isTimeExpired;
                             break;
@@ -219,6 +261,14 @@
             public IEnumerator<Context> enumerator;
             public bool stop;
             public Context context;
+
+            public bool empty
+            {
+                get
+                {
+                    return enumerator == null;
+                }
+            }
         }
     }
 }

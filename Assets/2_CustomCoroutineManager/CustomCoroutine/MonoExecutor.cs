@@ -1,4 +1,4 @@
-﻿namespace Unity.Extension
+﻿namespace Extension.Coroutine
 {
     using System;
     using System.Collections;
